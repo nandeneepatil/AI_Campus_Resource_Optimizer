@@ -3,9 +3,17 @@ import pandas as pd
 import sys
 from pathlib import Path
 
+# Allow imports from project root
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from models.demand_predictor import predict_electricity
+from agents.resource_analyzer import analyze_resources
+from agents.recommendation_agent import generate_recommendations
+
+
+# --------------------------------------------------
+# PAGE CONFIGURATION
+# --------------------------------------------------
 
 st.set_page_config(
     page_title="AI Campus Resource Optimizer",
@@ -14,32 +22,80 @@ st.set_page_config(
 )
 
 st.title("🏫 AI Campus Resource Optimizer")
-st.write("AI-powered campus resource utilization and efficiency analysis.")
+st.write(
+    "AI-powered campus resource utilization, prediction "
+    "and intelligent recommendations."
+)
 
-# Load data
+
+# --------------------------------------------------
+# LOAD DATA
+# --------------------------------------------------
+
 df = pd.read_csv("data/raw/campus_resources.csv")
 
-# Calculate utilization
+
+# --------------------------------------------------
+# RESOURCE ANALYSIS
+# --------------------------------------------------
+
 df["Utilization_%"] = (
-    df["Students_Present"] / df["Room_Capacity"] * 100
+    df["Students_Present"] /
+    df["Room_Capacity"] * 100
 ).round(2)
 
-# Classify rooms
-df["Status"] = "Efficient"
-df.loc[df["Utilization_%"] < 30, "Status"] = "Underutilized"
-df.loc[df["Utilization_%"] > 90, "Status"] = "Overcrowded"
+df["Electricity_Per_Student"] = (
+    df["Electricity_kWh"] /
+    df["Students_Present"].replace(0, 1)
+).round(2)
 
-# KPIs
+df["Status"] = "Efficient"
+
+df.loc[
+    df["Utilization_%"] < 30,
+    "Status"
+] = "Underutilized"
+
+df.loc[
+    df["Utilization_%"] > 90,
+    "Status"
+] = "Overcrowded"
+
+
+# --------------------------------------------------
+# KEY METRICS
+# --------------------------------------------------
+
 col1, col2, col3, col4 = st.columns(4)
 
-col1.metric("Total Records", len(df))
-col2.metric("Average Utilization", f"{df['Utilization_%'].mean():.1f}%")
-col3.metric("Underutilized", (df["Status"] == "Underutilized").sum())
-col4.metric("Overcrowded", (df["Status"] == "Overcrowded").sum())
+col1.metric(
+    "Total Records",
+    len(df)
+)
+
+col2.metric(
+    "Average Utilization",
+    f"{df['Utilization_%'].mean():.1f}%"
+)
+
+col3.metric(
+    "Underutilized",
+    (df["Status"] == "Underutilized").sum()
+)
+
+col4.metric(
+    "Overcrowded",
+    (df["Status"] == "Overcrowded").sum()
+)
+
 
 st.divider()
 
-# Room utilization
+
+# --------------------------------------------------
+# ROOM UTILIZATION
+# --------------------------------------------------
+
 st.subheader("📊 Room Utilization")
 
 room_usage = (
@@ -50,7 +106,24 @@ room_usage = (
 
 st.bar_chart(room_usage)
 
-# ML Prediction
+
+# --------------------------------------------------
+# RESOURCE CONSUMPTION
+# --------------------------------------------------
+
+st.subheader("⚡ Resource Consumption")
+
+resource_data = df.groupby("Room")[
+    ["Electricity_kWh", "Water_Liters"]
+].mean()
+
+st.bar_chart(resource_data)
+
+
+# --------------------------------------------------
+# AI ELECTRICITY PREDICTION
+# --------------------------------------------------
+
 st.subheader("🤖 AI Electricity Prediction")
 
 c1, c2 = st.columns(2)
@@ -81,7 +154,9 @@ with c2:
         value=60
     )
 
-if st.button("Predict Electricity Usage"):
+
+if st.button("🔮 Predict Electricity Usage"):
+
     prediction = predict_electricity(
         students,
         hours,
@@ -93,7 +168,37 @@ if st.button("Predict Electricity Usage"):
         f"🔋 Predicted Electricity Usage: {prediction} kWh"
     )
 
-# Resource status
+
+# --------------------------------------------------
+# AI RECOMMENDATIONS
+# --------------------------------------------------
+
+st.subheader("💡 AI Recommendations")
+
+analysis_df = analyze_resources()
+
+recommendations = generate_recommendations(
+    analysis_df
+)
+
+if recommendations:
+
+    for recommendation in recommendations:
+        st.info(
+            f"🤖 {recommendation}"
+        )
+
+else:
+
+    st.success(
+        "✅ No major resource issues detected."
+    )
+
+
+# --------------------------------------------------
+# RESOURCE STATUS TABLE
+# --------------------------------------------------
+
 st.subheader("⚠️ Resource Status")
 
 st.dataframe(
@@ -113,22 +218,37 @@ st.dataframe(
     width="stretch"
 )
 
-# Recommendations
-st.subheader("💡 AI Recommendations")
 
-underused = df[df["Status"] == "Underutilized"]
-overcrowded = df[df["Status"] == "Overcrowded"]
+# --------------------------------------------------
+# SUMMARY
+# --------------------------------------------------
 
-if not underused.empty:
-    st.warning(
-        f"{len(underused)} records show low utilization. "
-        "Consider reallocating classes to these rooms."
-    )
+st.subheader("📌 Campus Resource Summary")
 
-if not overcrowded.empty:
-    st.error(
-        f"{len(overcrowded)} records show high utilization. "
-        "Consider moving some classes to available rooms."
-    )
+total_electricity = df["Electricity_kWh"].sum()
+total_water = df["Water_Liters"].sum()
+average_utilization = df["Utilization_%"].mean()
 
-st.success("Resource analysis completed successfully.")
+s1, s2, s3 = st.columns(3)
+
+s1.metric(
+    "Total Electricity",
+    f"{total_electricity:.0f} kWh"
+)
+
+s2.metric(
+    "Total Water",
+    f"{total_water:.0f} L"
+)
+
+s3.metric(
+    "Average Utilization",
+    f"{average_utilization:.1f}%"
+)
+
+
+st.divider()
+
+st.success(
+    "✅ AI Campus Resource Analysis Completed Successfully"
+)
